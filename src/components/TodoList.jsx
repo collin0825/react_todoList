@@ -1,142 +1,265 @@
 import axios from "axios";
-import { useEffect, useState } from "react";
-const apiUrl = "https://todolist-api.hexschool.io";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import PropTypes from "prop-types";
+const { VITE_APP_HOST } = import.meta.env;
 
-// todolist
-function TodoList({ token }) {
-  const [todos, setTodos] = useState([]);
-  const [newTodo, setNewTodo] = useState("");
-
-  useEffect(() => {
-    getTodos();
-  }, [token]);
-
-  const getTodos = async () => {
+function TodoList({ tag, changeTag, todos, getTodo }) {
+  const filterTodo = useMemo(() => {
+    return todos.filter((item) => {
+      switch (tag) {
+        case "全部":
+          return item;
+        case "待完成":
+          return !item.status;
+        case "已完成":
+          return item.status;
+      }
+    });
+  }, [todos]);
+  const toggleTodo = async (e, id) => {
     try {
-      const res = await axios.get(`${apiUrl}/todos`, {
-        headers: {
-          Authorization: token,
-        },
-      });
-      setTodos(res.data.data);
-    } catch (error) {
-      console.log(error.response);
+      await axios.patch(`${VITE_APP_HOST}/todos/${id}/toggle`);
+      getTodo();
+    } catch (err) {
+      alert(err.response.data.message);
     }
   };
-
-  const addTodo = async () => {
-    if (!newTodo) {
-      alert("請輸入待辦");
-      return;
-    }
+  const delTodo = async (e, id) => {
+    e.preventDefault();
     try {
-      const res = await axios.post(
-        `${apiUrl}/todos`,
-        {
-          content: newTodo,
-        },
-        {
-          headers: {
-            Authorization: token,
-          },
-        }
+      await axios.delete(`${VITE_APP_HOST}/todos/${id}`);
+      getTodo();
+    } catch (err) {
+      alert(err.response.data.message);
+    }
+  };
+  const clearTodo = async (e) => {
+    e.preventDefault();
+    try {
+      const finishTodos = todos.filter(
+        (todo) =>
+          todo.status && axios.delete(`${VITE_APP_HOST}/todos/${todo.id}`)
       );
-      setNewTodo("");
-      getTodos();
-    } catch (error) {
-      console.log(error.response.data.message);
-    }
-  };
 
-  const completeTodo = async (id) => {
-    try {
-      const res = await axios.patch(
-        `${apiUrl}/todos/${id}/toggle`,
-        {},
-        {
-          headers: {
-            Authorization: token,
-          },
-        }
-      );
-      getTodos();
-    } catch (error) {
-      console.log(error.response.data.message);
-    }
-  };
-
-  const deleteTodo = async (id) => {
-    try {
-      const res = await axios.delete(`${apiUrl}/todos/${id}`, {
-        headers: {
-          Authorization: token,
-        },
-      });
-      getTodos();
-    } catch (error) {
-      console.log(error.response.data.message);
+      if (!finishTodos.length) {
+        alert("當前沒有已完成項目");
+        return;
+      }
+      await Promise.all(finishTodos);
+      getTodo();
+    } catch (err) {
+      alert(err.response.data.message);
     }
   };
   return (
-    <>
-      <h2 style={{ display: token ? "none" : "block" }}>
-        請先登入才能編輯代辦清單唷！
-      </h2>
-      <div style={{ display: token ? "block" : "none" }}>
-        <h2>Todo List</h2>
-        <div className="d-flex justify-content-center align-item-center mb-4">
-          <input
-            type="text"
-            className="form-control me-2 w-75"
-            placeholder="請輸入代辦事項"
-            value={newTodo}
-            onChange={(e) => setNewTodo(e.target.value)}
-          />
-          <button
-            type="button"
-            className="btn btn-sm-warning"
-            onClick={addTodo}
+    <div className="todoList_list">
+      <ul className="todoList_tab">
+        <li>
+          <a
+            href="#"
+            className={tag === "全部" ? "active" : ""}
+            onClick={changeTag}
           >
-            新增
-          </button>
-        </div>
-        <ul>
-          {todos.map((todo) => {
+            全部
+          </a>
+        </li>
+        <li>
+          <a
+            href="#"
+            className={tag === "待完成" ? "active" : ""}
+            onClick={changeTag}
+          >
+            待完成
+          </a>
+        </li>
+        <li>
+          <a
+            href="#"
+            className={tag === "已完成" ? "active" : ""}
+            onClick={changeTag}
+          >
+            已完成
+          </a>
+        </li>
+      </ul>
+      <div className="todoList_items">
+        <ul className="todoList_item">
+          {filterTodo.map((todo) => {
             return (
-              <li
-                className="d-flex justify-content-between mb-2 fw-bold"
-                key={todo.id}
-              >
-                <span
-                  style={{
-                    textDecoration: todo.status ? "line-through" : "none",
-                  }}
-                >
-                  {todo.content} {todo.status ? "[已完成]" : "[未完成]"}
-                </span>
-                <div className="d-flex">
-                  <button
-                    type="button"
-                    className="btn btn-sm-warning me-2"
-                    onClick={() => completeTodo(todo.id)}
-                  >
-                    切換
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm-warning"
-                    onClick={() => deleteTodo(todo.id)}
-                  >
-                    刪除
-                  </button>
-                </div>
+              <li key={todo.id}>
+                <label className="todoList_label">
+                  <input
+                    className="todoList_input"
+                    type="checkbox"
+                    value={todo.status}
+                    checked={todo.status}
+                    onChange={(e) => toggleTodo(e, todo.id)}
+                  />
+                  <span>{todo.content}</span>
+                </label>
+                <a href="#" onClick={(e) => delTodo(e, todo.id)}>
+                  <i className="fa fa-times"></i>
+                </a>
               </li>
             );
           })}
+          {!filterTodo.length && (
+            <li className="todoList_label" style={{ justifyContent: "center" }}>
+              請查看其他列表
+            </li>
+          )}
         </ul>
+        <div className="todoList_statistics">
+          <p>
+            {todos.filter((todo) => todo.status == false).length} 個待完成項目
+          </p>
+          <a href="#" onClick={clearTodo}>
+            清除已完成項目
+          </a>
+        </div>
       </div>
-    </>
+    </div>
   );
 }
 
-export default TodoList;
+TodoList.propTypes = {
+  tag: PropTypes.string,
+  changeTag: PropTypes.func,
+  todos: PropTypes.array,
+  getTodo: PropTypes.func,
+};
+
+function Todo() {
+  const nickname = useRef(false);
+  const [todos, setTodos] = useState([]);
+  const [tag, setTag] = useState("全部");
+  const newTodo = useRef();
+  const navigate = useNavigate();
+
+  const checkOut = async () => {
+    try {
+      const token = document.cookie
+        .split("; ")
+        .find((row) => row.startsWith("token="))
+        ?.split("=")[1];
+      axios.defaults.headers.common["Authorization"] = token;
+      const res = await axios.get(`${VITE_APP_HOST}/users/checkout`);
+      nickname.current = res.data.nickname;
+    } catch (err) {
+      Swal.fire({
+        title: "登入失敗",
+        text: "err.response.data.message",
+        icon: "error",
+        showConfirmButton: false,
+        timer: 1500,
+      });
+      navigate("/");
+    }
+  };
+
+  const getTodo = async () => {
+    try {
+      const res = await axios.get(`${VITE_APP_HOST}/todos`);
+      const { data } = res.data;
+      setTodos(data);
+    } catch (err) {
+      alert(err.response.data.message);
+    }
+  };
+
+  useEffect(() => {
+    checkOut();
+    getTodo();
+  }, [tag]);
+
+  // 登出
+  const signOut = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await axios.post(`${VITE_APP_HOST}/users/sign_out`);
+      document.cookie = `token=';expires=${new Date()}`;
+      Swal.fire({
+        title: res.data.message,
+        icon: "success",
+        showConfirmButton: false,
+        timer: 1500,
+      });
+    } catch (err) {
+      Swal.fire({
+        title: err.data.message,
+        icon: "error",
+        showConfirmButton: false,
+        timer: 1500,
+      });
+    }
+    navigate("/");
+  };
+
+  const changeTag = (e) => {
+    e.preventDefault();
+    setTag(e.target.textContent);
+  };
+
+  const addTodo = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${VITE_APP_HOST}/todos`, {
+        content: newTodo.current.value,
+      });
+      newTodo.current.value = "";
+      getTodo();
+    } catch (err) {
+      alert(err.response.data.message);
+    }
+  };
+
+  return (
+    <div id="todoListPage" className="bg-half">
+      <nav>
+        <h1>
+          <a href="#">ONLINE TODO LIST</a>
+        </h1>
+        <ul>
+          <li className="todo_sm">
+            <a href="#">
+              <span>{nickname.current}的代辦</span>
+            </a>
+          </li>
+          <li>
+            <a href="#" onClick={signOut}>
+              登出
+            </a>
+          </li>
+        </ul>
+      </nav>
+      <div className="conatiner todoListPage vhContainer">
+        <div className="todoList_Content">
+          <div className="inputBox">
+            <input type="text" placeholder="請輸入待辦事項" ref={newTodo} />
+            <a href="#" onClick={addTodo}>
+              <i className="fa fa-plus"></i>
+            </a>
+          </div>
+          {todos.length ? (
+            <TodoList
+              tag={tag}
+              changeTag={changeTag}
+              todos={todos}
+              getTodo={getTodo}
+            ></TodoList>
+          ) : (
+            <div className="empty">
+              <p>目前尚無待辦事項</p>
+              <img
+                src="https://github.com/panduola666/2023_React/blob/master/src/assets/img/empty.png?raw=true"
+                alt="目前尚無待辦事項"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+export default Todo;
